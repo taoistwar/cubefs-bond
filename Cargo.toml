@@ -1,0 +1,11 @@
+[package]
+name = "hello-rocket"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rocket = { git = "https://github.com/SergioBenitez/Rocket", rev = "f10a2d7d9c6c8e78771d458714d476d0ffcd1812", features = ["json"]}
+serde_json = "1.0.85"
+serde = { version = "1.0.144", features = ["derive"] }
