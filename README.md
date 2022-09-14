@@ -22,11 +22,11 @@ sed -i s/master_address/10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868/g con
 ### 接口
 
 - param
-  - volume_name
-    - volName
+  - volName
     - mountPoint
     - logDir
   - master_address
-  - exporter_port 不能和其它卷相同
-  - prof_port
+  - exporterPort 不能和其它卷相同
+  - profPort
+  - owner
 - body:

@@ -11,10 +11,15 @@ struct Bond {
 
 impl Bond {
     fn deal_body(input: Option<String>) -> std::result::Result<HashMap<String, String>, String> {
+        if input.is_none() {
+            return Ok(HashMap::new());
+        }
         let input = input.unwrap();
-        println!("{}", input);
+        if input.is_empty() {
+            return Ok(HashMap::new());
+        }
         let config: HashMap<String, String> = match serde_json::from_str(&input) {
-            Ok(text) => text,
+            Ok(config) => config,
             Err(e) => return Err(format!("error parsing from string to json: {:?}", e)),
         };
         if let Err(e) = serde_json::to_string_pretty(&config) {
@@ -22,66 +27,34 @@ impl Bond {
         };
         Ok(config)
     }
-    fn deal_item(
-        param: &Option<String>,
-        config: &mut HashMap<String, String>,
-        key: &str,
-    ) -> Result<String, String> {
-        match param {
-            Some(v) => {
-                config.insert(key.to_string(), v.clone());
-                Ok(v.clone())
-            }
-            None => match config.get(key) {
-                Some(v) => Ok(v.clone()),
-                None => Err(format!("{} missing", key)),
-            },
-        }
-    }
-    fn setup(
-        volume_name: Option<String>,
-        master_address: Option<String>,
-        exporter_port: Option<String>,
-        prof_port: Option<String>,
-        owner: Option<String>,
-        input: Option<String>,
-    ) -> Result<Bond, String> {
-        let mut config: HashMap<String, String> = if input.is_none() {
-            HashMap::new()
-        } else {
-            match Self::deal_body(input) {
-                Ok(res) => res,
-                Err(e) => return Err(format!("fail: input param missing, {}", e)),
-            }
-        };
 
-        let volume_name = match Self::deal_item(&volume_name, &mut config, "volName") {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
-        match Self::deal_item(&master_address, &mut config, "masterAddr") {
+    fn setup(input: Option<String>) -> Result<Bond, String> {
+        let mut config = match Self::deal_body(input) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
 
-        match Self::deal_item(&exporter_port, &mut config, "exporterPort") {
-            Ok(v) => v,
-            Err(e) => return Err(e),
+        let volume_name = match config.get("volName") {
+            Some(v) => v.clone(),
+            None => return Err("volName missing".to_string()),
         };
-        match Self::deal_item(&prof_port, &mut config, "profPort") {
-            Ok(v) => v,
-            Err(e) => return Err(e),
+        match config.get("masterAddr") {
+            Some(v) => v.clone(),
+            None => return Err("masterAddr missing".to_string()),
         };
-        match Self::deal_item(&owner, &mut config, "owner") {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
+
         let mount_file_path = format!("/cfs/mount/{}", volume_name);
         config.insert("mountPoint".to_string(), mount_file_path);
         let log_path = format!("/cfs/client/{}", &volume_name);
         config.insert("logDir".to_string(), log_path.clone());
-        let config_file_path = format!("/cfs/client/{}", volume_name);
-        config.insert("logLevel".to_string(), "info".to_string());
+
+        let config_file_path = format!("/cfs/client/{}/config.json", volume_name);
+        if config.get("logLevel").is_none() {
+            config.insert("logLevel".to_string(), "info".to_string());
+        }
+        if config.get("owner").is_none() {
+            config.insert("owner".to_string(), "cfs".to_string());
+        }
         let bond = Bond {
             config,
             log_path,
@@ -101,7 +74,6 @@ impl Bond {
                 ));
             }
         }
-
         let content = match serde_json::to_string_pretty(&self.config) {
             Ok(v) => v,
             Err(e) => return Err(format!("error parsing from json to string: {:?}", e)),
@@ -112,38 +84,41 @@ impl Bond {
         Ok(())
     }
     pub fn startup(&self) -> Result<String, String> {
-        // 2. write json config file
+        // write json config file
         if let Err(e) = &self.write_config_file() {
             return Err(format!("fail: write config to file, {}", e));
         }
+        // create log path
+        if let Err(e) = std::fs::create_dir_all(&self.log_path) {
+            return Err(format!("create log dir[{}] fail, {}", self.log_path, e));
+        }
         let shell = format!(
-            "cd /cfs/client/{} && nohup /cfs/client/cfs-client -f -c {} &",
+            "cd {} && nohup /cfs/client/cfs-client -f -c {} &",
             &self.log_path, &self.config_file_path
         );
         match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
-            Ok(output) => match String::from_utf8(output.stdout) {
-                Ok(v) => Ok(v),
-                Err(e) => Err(format!("fail: parse shell output fail, {}", e)),
-            },
+            Ok(output) => {
+                if !output.stderr.is_empty() {
+                    match String::from_utf8(output.stderr) {
+                        Ok(v) => return Err(v),
+                        Err(e) => return Err(format!("fail: parse shell stderr fail, msg:{}", e)),
+                    }
+                }
+
+                match String::from_utf8(output.stdout) {
+                    Ok(v) => Ok(v),
+                    Err(e) => Err(format!("fail: parse shell stdout fail, msg:{}", e)),
+                }
+            }
             Err(e) => Err(format!("fail: start[{}] fail, output:{}\n", &shell, e)),
         }
     }
 }
 
-#[post(
-    "/bond?<volName>&<masterAddr>&<exporterPort>&<profPort>&<owner>",
-    data = "<input>"
-)]
-pub fn bond(
-    volName: Option<String>,
-    masterAddr: Option<String>,
-    exporterPort: Option<String>,
-    profPort: Option<String>,
-    owner: Option<String>,
-    input: Option<String>,
-) -> String {
+#[post("/mount", data = "<input>")]
+pub fn mount(input: Option<String>) -> String {
     // 1. setup and start
-    let bond = match Bond::setup(volName, masterAddr, exporterPort, profPort, owner, input) {
+    let bond = match Bond::setup(input) {
         Ok(v) => v,
         Err(e) => return format!("fail: parse param, {}", e),
     };
@@ -161,33 +136,18 @@ mod test {
 
     #[test]
     fn test() {
-        let volume_name = Some("test".to_string());
-        let master_address = Some("x".to_string());
-        let exporter_port = Some("9503".to_string());
-        let prof_port = Some("17511".to_string());
         let input = Some(
             r#"{
-            "mountPoint": "/cfs/mountpoint",
-            "volName": "ltptest",
-            "owner": "ltptest",
-            "masterAddr": "10.196.59.198:17010,10.196.59.199:17010,10.196.59.200:17010",
-            "logDir": "/cfs/client/log",
+            "volName": "test",
+            "owner": "cfs",
+            "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868",
             "profPort": "17510",
-            "exporterPort": "9504",
-            "logLevel": "info"
+            "exporterPort": "9504"
           }"#
             .to_string(),
         );
-        let owner = Some("cfs".to_string());
         // 1. setup and start
-        let bond = match Bond::setup(
-            volume_name,
-            master_address,
-            exporter_port,
-            prof_port,
-            owner,
-            input,
-        ) {
+        let bond = match Bond::setup(input) {
             Ok(v) => v,
             Err(e) => {
                 println!("fail: parse param, {}", e);
@@ -203,5 +163,25 @@ mod test {
                 println!("fail: start client fail, {}", e)
             }
         }
+    }
+}
+
+#[get("/umount/<volume_name>")]
+pub fn umount(volume_name: Option<String>) -> String {
+    if volume_name.is_none() {
+        return "fail: volume_name missing".to_string();
+    }
+    let volume_name = volume_name.unwrap();
+    if volume_name.is_empty() {
+        return "fail: volume_name empty".to_string();
+    }
+
+    let shell = format!("umount /cfs/mount/{}", volume_name);
+    match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
+        Ok(output) => match String::from_utf8(output.stdout) {
+            Ok(v) => v,
+            Err(e) => format!("fail: parse shell output fail, {}", e),
+        },
+        Err(e) => format!("fail: start[{}] fail, output:{}\n", &shell, e),
     }
 }
