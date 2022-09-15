@@ -5,6 +5,8 @@ use std::{collections::HashMap, fs};
 
 use std::process::Command;
 
+use salvo::prelude::*;
+
 struct Bond {
     config: HashMap<String, String>,
     log_path: String,
@@ -12,30 +14,8 @@ struct Bond {
 }
 
 impl Bond {
-    fn deal_body(input: Option<String>) -> std::result::Result<HashMap<String, String>, String> {
-        if input.is_none() {
-            return Ok(HashMap::new());
-        }
-        let input = input.unwrap();
-        if input.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let config: HashMap<String, String> = match serde_json::from_str(&input) {
-            Ok(config) => config,
-            Err(e) => return Err(format!("error parsing from string to json: {:?}", e)),
-        };
-        if let Err(e) = serde_json::to_string_pretty(&config) {
-            return Err(format!("error parsing from json to string: {:?}", e));
-        };
-        Ok(config)
-    }
-
-    fn setup(input: Option<String>) -> Result<Bond, String> {
-        let mut config = match Self::deal_body(input) {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
-
+    fn setup(config: HashMap<String, String>) -> Result<Bond, String> {
+        let mut config = config;
         let volume_name = match config.get("volName") {
             Some(v) => v.clone(),
             None => return Err("volName missing".to_string()),
@@ -102,6 +82,7 @@ impl Bond {
         match Command::new("/bin/sh").arg("-c").arg(&shell).spawn() {
             Ok(child) => {
                 let pid = child.id();
+                sleep(Duration::from_millis(1500));
                 let res = self.pid_exists(pid);
                 if res {
                     Ok(format!("{}", pid))
@@ -117,7 +98,6 @@ impl Bond {
     }
 
     fn pid_exists(&self, pid: u32) -> bool {
-        sleep(Duration::from_millis(1500));
         let shell = format!(
             "ps aux|grep {}|grep '/cfs/client/cfs-client -f -c {}'|wc -l",
             pid, &self.config_file
@@ -135,59 +115,84 @@ impl Bond {
     }
 }
 
-#[post("/mount", data = "<input>")]
-pub fn mount(input: Option<String>) -> String {
+#[handler]
+async fn mount(req: &mut Request, res: &mut Response) {
+    let config = req.parse_body::<HashMap<String, String>>().await;
+    if let Err(e) = config {
+        res.render(Text::Plain(format!("parse body fail: {}", e)));
+        return;
+    }
+    let config = config.unwrap();
     // 1. setup and start
-    let bond = match Bond::setup(input) {
+    let bond = match Bond::setup(config) {
         Ok(v) => v,
-        Err(e) => return format!("fail: parse param, {}", e),
+        Err(e) => {
+            res.render(Text::Plain(format!("fail: parse param, {}", e)));
+            return;
+        }
     };
 
     // 2. start cfs-client
     match bond.startup() {
-        Ok(v) => v,
-        Err(e) => format!("fail: start client fail, {}", e),
+        Ok(v) => {
+            res.render(Text::Plain(v));
+        }
+        Err(e) => {
+            res.render(Text::Plain(format!("fail: start client fail, {}", e)));
+        }
     }
 }
 
-#[get("/umount/<volume_name>")]
-pub fn umount(volume_name: Option<String>) -> String {
+#[handler]
+pub async fn umount(req: &mut Request, res: &mut Response) {
+    let volume_name = req.param::<String>("volume_name");
     if volume_name.is_none() {
-        return "fail: volume_name missing".to_string();
+        res.render(Text::Plain("fail: volume_name missing"));
+        return;
     }
     let volume_name = volume_name.unwrap();
     if volume_name.is_empty() {
-        return "fail: volume_name empty".to_string();
+        res.render(Text::Plain("fail: volume_name empty"));
+        return;
     }
 
     let shell = format!("umount /cfs/mount/{}", volume_name);
     match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
         Ok(output) => match String::from_utf8(output.stdout) {
-            Ok(v) => v,
-            Err(e) => format!("fail: parse shell output fail, {}", e),
+            Ok(v) => {
+                res.render(Text::Plain(v));
+            }
+            Err(e) => {
+                res.render(Text::Plain(format!("fail: parse shell output fail, {}", e)));
+            }
         },
-        Err(e) => format!("fail: start[{}] fail, output:{}\n", &shell, e),
+        Err(e) => {
+            res.render(Text::Plain(format!(
+                "fail: start[{}] fail, output:{}\n",
+                &shell, e
+            )));
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use super::Bond;
 
     #[test]
     fn test() {
-        let input = Some(
-            r#"{
+        let input = r#"{
             "volName": "test",
             "owner": "cfs",
             "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868",
             "profPort": "17510",
             "exporterPort": "9504"
-          }"#
-            .to_string(),
-        );
+          }"#;
         // 1. setup and start
-        let bond = match Bond::setup(input) {
+        let config: HashMap<String, String> = serde_json::from_str(input).unwrap();
+        let bond = match Bond::setup(config) {
             Ok(v) => v,
             Err(e) => {
                 println!("fail: parse param, {}", e);
