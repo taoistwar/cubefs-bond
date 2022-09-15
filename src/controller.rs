@@ -1,4 +1,6 @@
 use std::path::Path;
+use std::thread::sleep;
+use std::time::Duration;
 use std::{collections::HashMap, fs};
 
 use std::process::Command;
@@ -6,7 +8,7 @@ use std::process::Command;
 struct Bond {
     config: HashMap<String, String>,
     log_path: String,
-    config_file_path: String,
+    config_file: String,
 }
 
 impl Bond {
@@ -48,7 +50,7 @@ impl Bond {
         let log_path = format!("/cfs/client/{}", &volume_name);
         config.insert("logDir".to_string(), log_path.clone());
 
-        let config_file_path = format!("/cfs/client/{}/config.json", volume_name);
+        let config_file = format!("/cfs/client/{}/config.json", volume_name);
         if config.get("logLevel").is_none() {
             config.insert("logLevel".to_string(), "info".to_string());
         }
@@ -58,13 +60,13 @@ impl Bond {
         let bond = Bond {
             config,
             log_path,
-            config_file_path,
+            config_file,
         };
 
         Ok(bond)
     }
     pub fn write_config_file(&self) -> Result<(), String> {
-        let path = Path::new(&self.config_file_path);
+        let path = Path::new(&self.config_file);
         if let Some(parent) = path.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 return Err(format!(
@@ -78,7 +80,7 @@ impl Bond {
             Ok(v) => v,
             Err(e) => return Err(format!("error parsing from json to string: {:?}", e)),
         };
-        if let Err(e) = fs::write(&self.config_file_path, content) {
+        if let Err(e) = fs::write(&self.config_file, content) {
             return Err(format!("fail: write body to path file fail, {}", e));
         }
         Ok(())
@@ -92,25 +94,43 @@ impl Bond {
         if let Err(e) = std::fs::create_dir_all(&self.log_path) {
             return Err(format!("create log dir[{}] fail, {}", self.log_path, e));
         }
+
         let shell = format!(
             "cd {} && nohup /cfs/client/cfs-client -f -c {} &",
-            &self.log_path, &self.config_file_path
+            &self.log_path, &self.config_file
         );
-        match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
-            Ok(output) => {
-                if !output.stderr.is_empty() {
-                    match String::from_utf8(output.stderr) {
-                        Ok(v) => return Err(v),
-                        Err(e) => return Err(format!("fail: parse shell stderr fail, msg:{}", e)),
-                    }
-                }
-
-                match String::from_utf8(output.stdout) {
-                    Ok(v) => Ok(v),
-                    Err(e) => Err(format!("fail: parse shell stdout fail, msg:{}", e)),
+        match Command::new("/bin/sh").arg("-c").arg(&shell).spawn() {
+            Ok(child) => {
+                let pid = child.id();
+                let res = self.pid_exists(pid);
+                if res {
+                    Ok(format!("{}", pid))
+                } else {
+                    Ok("fail: child process exit".to_string())
                 }
             }
-            Err(e) => Err(format!("fail: start[{}] fail, output:{}\n", &shell, e)),
+            Err(e) => {
+                println!("{}", e);
+                Err(format!("fail: start[{}] fail, output:{}\n", &shell, e))
+            }
+        }
+    }
+
+    fn pid_exists(&self, pid: u32) -> bool {
+        sleep(Duration::from_millis(1500));
+        let shell = format!(
+            "ps aux|grep {}|grep '/cfs/client/cfs-client -f -c {}'|wc -l",
+            pid, &self.config_file
+        );
+        match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
+            Ok(output) => match String::from_utf8(output.stdout) {
+                Ok(v) => {
+                    let v = v.trim();
+                    v != "1"
+                }
+                Err(_) => false,
+            },
+            Err(_) => false,
         }
     }
 }
@@ -127,6 +147,26 @@ pub fn mount(input: Option<String>) -> String {
     match bond.startup() {
         Ok(v) => v,
         Err(e) => format!("fail: start client fail, {}", e),
+    }
+}
+
+#[get("/umount/<volume_name>")]
+pub fn umount(volume_name: Option<String>) -> String {
+    if volume_name.is_none() {
+        return "fail: volume_name missing".to_string();
+    }
+    let volume_name = volume_name.unwrap();
+    if volume_name.is_empty() {
+        return "fail: volume_name empty".to_string();
+    }
+
+    let shell = format!("umount /cfs/mount/{}", volume_name);
+    match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
+        Ok(output) => match String::from_utf8(output.stdout) {
+            Ok(v) => v,
+            Err(e) => format!("fail: parse shell output fail, {}", e),
+        },
+        Err(e) => format!("fail: start[{}] fail, output:{}\n", &shell, e),
     }
 }
 
@@ -164,24 +204,10 @@ mod test {
             }
         }
     }
-}
-
-#[get("/umount/<volume_name>")]
-pub fn umount(volume_name: Option<String>) -> String {
-    if volume_name.is_none() {
-        return "fail: volume_name missing".to_string();
-    }
-    let volume_name = volume_name.unwrap();
-    if volume_name.is_empty() {
-        return "fail: volume_name empty".to_string();
-    }
-
-    let shell = format!("umount /cfs/mount/{}", volume_name);
-    match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
-        Ok(output) => match String::from_utf8(output.stdout) {
-            Ok(v) => v,
-            Err(e) => format!("fail: parse shell output fail, {}", e),
-        },
-        Err(e) => format!("fail: start[{}] fail, output:{}\n", &shell, e),
+    #[test]
+    fn test1() {
+        let s1 = format!("x{}", "xx");
+        let x = s1.as_str() == "xxx";
+        println!("{}", x);
     }
 }
