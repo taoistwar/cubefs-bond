@@ -138,12 +138,17 @@ impl Bond {
         if let Err(e) = std::fs::create_dir_all(&self.log_path) {
             return Err(format!("create log dir[{}] fail, {}", self.log_path, e));
         }
-        if let Err(e) = std::fs::create_dir_all(&self.mount_file_path) {
-            return Err(format!(
-                "create mount dir[{}] fail, {}",
-                &self.mount_file_path, e
-            ));
+        let mount_file_path = Path::new(&self.mount_file_path);
+
+        if !mount_file_path.exists() {
+            if let Err(e) = std::fs::create_dir_all(&self.mount_file_path) {
+                return Err(format!(
+                    "create mount dir[{}] fail, maybe client process exit but not umount. {}",
+                    &self.mount_file_path, e
+                ));
+            }
         }
+
         let shell = format!("/cfs/client/cfs-client -f -c {}", &self.config_file);
         match Command::new("/cfs/client/cfs-client")
             .arg("-f")
