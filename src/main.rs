@@ -1,4 +1,5 @@
-mod controller;
+mod mount;
+mod umount;
 
 #[macro_use]
 extern crate rocket;
@@ -14,5 +15,5 @@ fn index() -> &'static str {
 }
 #[launch]
 fn rocket() -> _ {
-    rocket::build().mount("/", routes![index, controller::mount, controller::umount])
+    rocket::build().mount("/", routes![index, mount::mount, umount::umount])
 }

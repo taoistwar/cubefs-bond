@@ -73,6 +73,7 @@ struct Bond {
     config: ClientConfig,
     log_path: String,
     config_file: String,
+    mount_file_path: String,
 }
 
 impl Bond {
@@ -88,7 +89,7 @@ impl Bond {
         let volume_name = &config.volName.as_ref().unwrap();
 
         let mount_file_path = format!("/cfs/mount/{}", volume_name);
-        config.mountPoint = Some(mount_file_path);
+        config.mountPoint = Some(mount_file_path.clone());
         let log_path = format!("/cfs/client/{}", &volume_name);
         config.logDir = Some(log_path.clone());
 
@@ -103,6 +104,7 @@ impl Bond {
             config,
             log_path,
             config_file,
+            mount_file_path,
         };
 
         Ok(bond)
@@ -136,12 +138,19 @@ impl Bond {
         if let Err(e) = std::fs::create_dir_all(&self.log_path) {
             return Err(format!("create log dir[{}] fail, {}", self.log_path, e));
         }
-
-        let shell = format!(
-            "cd {} && nohup /cfs/client/cfs-client -f -c {} &",
-            &self.log_path, &self.config_file
-        );
-        match Command::new("/bin/sh").arg("-c").arg(&shell).spawn() {
+        if let Err(e) = std::fs::create_dir_all(&self.mount_file_path) {
+            return Err(format!(
+                "create mount dir[{}] fail, {}",
+                &self.mount_file_path, e
+            ));
+        }
+        let shell = format!("/cfs/client/cfs-client -f -c {}", &self.config_file);
+        match Command::new("/cfs/client/cfs-client")
+            .arg("-f")
+            .arg("-c")
+            .arg(&self.config_file)
+            .spawn()
+        {
             Ok(child) => {
                 let pid = child.id();
                 sleep(Duration::from_millis(1500));
@@ -168,7 +177,7 @@ impl Bond {
             Ok(output) => match String::from_utf8(output.stdout) {
                 Ok(v) => {
                     let v = v.trim();
-                    v != "1"
+                    v != "0"
                 }
                 Err(_) => false,
             },
@@ -201,32 +210,6 @@ pub fn mount(input: Option<String>) -> String {
         Ok(v) => v,
         Err(e) => {
             format!("fail: start client fail, {}", e)
-        }
-    }
-}
-
-#[get("/umount/<volume_name>")]
-pub fn umount(volume_name: Option<String>) -> String {
-    if volume_name.is_none() {
-        return "fail: volume_name missing".to_string();
-    }
-    let volume_name = volume_name.unwrap();
-    if volume_name.is_empty() {
-        return "fail: volume_name empty".to_string();
-    }
-
-    let shell = format!("umount /cfs/mount/{}", volume_name);
-    match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
-        Ok(output) => match String::from_utf8(output.stdout) {
-            Ok(v) => {
-                return v;
-            }
-            Err(e) => {
-                return format!("fail: parse shell output fail, {}", e).to_string();
-            }
-        },
-        Err(e) => {
-            return format!("fail: start[{}] fail, output:{}\n", &shell, e);
         }
     }
 }

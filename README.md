@@ -17,7 +17,7 @@ sed -i s/master_address/10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868/g con
 - 占用宿主机端口，且需要人式维护
   - exporterPort
   - profPort
-- 
+-
 
 ### 接口
 
@@ -34,5 +34,5 @@ sed -i s/master_address/10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868/g con
 样例：
 
 ```bash
-curl -XPOST -d '{ "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868", "volName": "hm_pre_hopper", "owner": "cfs", "logLevel": "info", "exporterPort": 19320, "profPort": "17320" }' http://localhost/mount
+curl -XPOST -d '{ "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868", "volName": "hm_pre_hopper", "owner": "cfs", "logLevel": "info", "exporterPort": "19320", "profPort": "17320" }' http://localhost:8000/mount
 ```
