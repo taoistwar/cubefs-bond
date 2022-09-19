@@ -30,3 +30,9 @@ sed -i s/master_address/10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868/g con
   - profPort
   - owner
 - body:
+
+样例：
+
+```bash
+curl --unix-socket /cfs/bond/salvo.sock  -d '{ "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868", "volName": "hm_pre_hopper", "owner": "cfs", "logLevel": "info", "exporterPort": 19320, "profPort": "17320" }' http://locahost/mount
+```

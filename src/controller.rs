@@ -116,7 +116,7 @@ impl Bond {
 }
 
 #[handler]
-async fn mount(req: &mut Request, res: &mut Response) {
+pub async fn mount(req: &mut Request, res: &mut Response) {
     let config = req.parse_body::<HashMap<String, String>>().await;
     if let Err(e) = config {
         res.render(Text::Plain(format!("parse body fail: {}", e)));
@@ -208,11 +208,5 @@ mod test {
                 println!("fail: start client fail, {}", e)
             }
         }
-    }
-    #[test]
-    fn test1() {
-        let s1 = format!("x{}", "xx");
-        let x = s1.as_str() == "xxx";
-        println!("{}", x);
     }
 }

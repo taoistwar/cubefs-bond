@@ -23,6 +23,8 @@ async fn main() {
 
     let router = Router::new()
         .get(index)
+        .push(Router::with_path("/mount/<volume_name>").delete(controller::mount))
+        .push(Router::with_path("/bond/<volume_name>").delete(controller::mount))
         .push(Router::with_path("/umount/<volume_name>").delete(controller::umount));
 
     Server::new(UnixListener::bind(path)).serve(router).await;
