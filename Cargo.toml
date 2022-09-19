@@ -9,5 +9,8 @@ edition = "2021"
 serde_json = "1.0.85"
 serde = { version = "1.0.144", features = ["derive"] }
 serde_derive = "1.0.144"
-salvo = "0.34"
 tokio = { version = "1", features = ["macros"] }
+
+rocket = { git = "https://github.com/SergioBenitez/Rocket", rev = "f10a2d7d9c6c8e78771d458714d476d0ffcd1812", features = [
+  "json",
+] }
