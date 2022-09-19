@@ -90,7 +90,7 @@ impl Bond {
 
         let mount_file_path = format!("/cfs/mount/{}", volume_name);
         config.mountPoint = Some(mount_file_path.clone());
-        let log_path = format!("/cfs/client/{}", &volume_name);
+        let log_path = format!("/cfs/client/{}/log", &volume_name);
         config.logDir = Some(log_path.clone());
 
         let config_file = format!("/cfs/client/{}/config.json", volume_name);
