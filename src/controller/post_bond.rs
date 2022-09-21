@@ -8,7 +8,7 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::{utils, CFS_MOUNT_HOME};
+use crate::utils;
 
 #[allow(unused, non_snake_case)]
 #[skip_serializing_none]

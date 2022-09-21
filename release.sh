@@ -15,6 +15,6 @@ function release() {
   chmod +x dist/cubefs/bin/*
   cd dist/ && tar -zcf release.tar.gz  cubefs
   cd ${OLD_DIR}
-  rm -rf dist target
+  rm -rf dist/cubefs target
 }
 release
