@@ -19,6 +19,7 @@ const CFS_MOUNT_HOME: &str = "/cfs/mount";
 
 #[launch]
 fn rocket() -> _ {
-    let figment = Figment::from(rocket::Config::default()).merge(Toml::file("cubefs-bond.toml").nested());
+    let figment = Figment::from(rocket::Config::default())
+        .merge(Toml::file("conf/cubefs-bond.toml").nested());
     rocket::custom(figment).mount("/api", routes![index, mount, umount, get_bond])
 }

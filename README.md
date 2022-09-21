@@ -62,7 +62,18 @@ cubefs-bond 是此种方式的宿主机代理实现.
 
 确保宿主机中 cfs-client 客户端位于: /cfs/client/cfs-client
 
-### 发布版安装
+### 安装包获取
+
+#### 源码构建
+
+```
+git clone https://github.com/taoistwar/cubefs-bond.git
+cd cubefs-bond
+./build
+ls dist/cubefs-bond-0.1.x.tar.gz
+```
+
+#### 发布版
 
 下载 cubefs-bond.tar.gz
 
@@ -72,13 +83,13 @@ cubefs-bond 是此种方式的宿主机代理实现.
 tar -zxvf cubefs-bond.tar.gz -C /opt
 ```
 
-### 源码安装
+### 安装
+
+只是解压就行
 
 ```bash
-git clone https://github.com/taoistwar/cubefs-bond.git
-cd cubefs-bond
-./build
-tar -zxcv dist/release.tar.gz -C  /opt/
+tar -zxcv dist/release.tar.gz -C  /data/service/
+ln -s /data/service/cubefs-bond-0.1.4/ cubefs-bond
 ```
 
 ## 启停
@@ -86,19 +97,19 @@ tar -zxcv dist/release.tar.gz -C  /opt/
 ### 启动
 
 ```bash
-/opt/cubefs-bond/bin/stop.sh
+/data/service/cubefs-bond/bin/stop.sh
 ```
 
 ### 停止
 
 ```bash
-/opt/cubefs-bond/bin/stop.sh
+/data/service/cubefs-bond/bin/stop.sh
 ```
 
 ### 查看
 
 ```bash
-/opt/cubefs-bond/bin/pids.sh
+/data/service/cubefs-bond/bin/pids.sh
 ```
 
 ## 使用

@@ -15,6 +15,7 @@
   - 使用 try {} catch 式处理？ panic!应该是进程崩溃的错误，但非嵌入设备可以捕获……
 - OpenTelemetry 集成？
 - Metrics for Prometheus Exporter
+- 可配置 bond、cfs-client、mount 目录
 
 ## 0.1.4
 
