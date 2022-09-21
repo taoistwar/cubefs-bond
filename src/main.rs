@@ -1,19 +1,24 @@
-mod mount;
-mod umount;
+mod controller;
+mod utils;
+use controller::delete_bond::umount;
+use controller::get_bond::get_bond;
+use controller::index::index;
+use controller::post_bond::mount;
+
+use figment::{
+    providers::{Format, Toml},
+    Figment,
+};
 
 #[macro_use]
 extern crate rocket;
 
-#[get("/")]
-fn index() -> &'static str {
-    r#"
-        API  URI: /mount
-             BODY: {}
+const CFS_CLIENT_FILE: &str = "/cfs/client/cfs-client";
+const CFS_BOND_HOME: &str = "/cfs/bond";
+const CFS_MOUNT_HOME: &str = "/cfs/mount";
 
-    body is json, and for cubefs client config.json content
-"#
-}
 #[launch]
 fn rocket() -> _ {
-    rocket::build().mount("/", routes![index, mount::mount, umount::umount])
+    let figment = Figment::from(rocket::Config::default()).merge(Toml::file("cubefs-bond.toml").nested());
+    rocket::custom(figment).mount("/api", routes![index, mount, umount, get_bond])
 }

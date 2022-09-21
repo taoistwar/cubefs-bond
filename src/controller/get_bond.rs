@@ -1,7 +1,9 @@
 use std::process::Command;
 
-#[get("/umount/<volume_name>")]
-pub fn umount(volume_name: Option<String>) -> String {
+use crate::utils;
+
+#[get("/bond/<volume_name>")]
+pub fn get_bond(volume_name: Option<String>) -> String {
     if volume_name.is_none() {
         return "fail: volume_name missing".to_string();
     }
@@ -9,15 +11,17 @@ pub fn umount(volume_name: Option<String>) -> String {
     if volume_name.is_empty() {
         return "fail: volume_name empty".to_string();
     }
-    let mount_path = format!("umount /cfs/mount/{}", volume_name);
-
-    let shell = format!(
-        "ps aux|grep cfs-client |grep {}|cut -d ' ' -f 2|xargs kill -9 && umount {}",
-        volume_name, mount_path
-    );
-    match Command::new("sh").arg("-c").arg(&mount_path).output() {
+    let shell = utils::get_bond_shell(&volume_name);
+    match Command::new("sh").arg("-c").arg(&shell).output() {
         Ok(output) => match String::from_utf8(output.stdout) {
-            Ok(v) => "ok".to_string(),
+            Ok(v) => {
+                let v = v.trim();
+                if v == "0" {
+                    "cfs-client not start".to_string()
+                } else {
+                    "OK".to_string()
+                }
+            }
             Err(e) => format!("fail: parse shell output fail, {}", e),
         },
         Err(e) => {

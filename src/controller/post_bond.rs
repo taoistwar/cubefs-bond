@@ -6,8 +6,12 @@ use std::time::Duration;
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
+
+use crate::{utils, CFS_MOUNT_HOME};
 
 #[allow(unused, non_snake_case)]
+#[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct ClientConfig {
     mountPoint: Option<String>, // 挂载点，是
@@ -71,9 +75,7 @@ struct ClientConfig {
 
 struct Bond {
     config: ClientConfig,
-    log_path: String,
-    config_file: String,
-    mount_file_path: String,
+    volume_name: String,
 }
 
 impl Bond {
@@ -86,14 +88,13 @@ impl Bond {
         if config.masterAddr.is_empty() {
             return Err("masterAddr missing".to_string());
         }
-        let volume_name = &config.volName.as_ref().unwrap();
+        let volume_name = config.volName.as_ref().unwrap().clone();
+        // mount file
+        config.mountPoint = Some(utils::gen_mount_path(&volume_name));
+        // bond volume
+        config.logDir = Some(utils::gen_log_path(&volume_name));
 
-        let mount_file_path = format!("/cfs/mount/{}", volume_name);
-        config.mountPoint = Some(mount_file_path.clone());
-        let log_path = format!("/cfs/client/{}/log", &volume_name);
-        config.logDir = Some(log_path.clone());
-
-        let config_file = format!("/cfs/client/{}/config.json", volume_name);
+        // set default value
         if config.logLevel.is_none() {
             config.logLevel = Some("info".to_string());
         }
@@ -102,82 +103,87 @@ impl Bond {
         }
         let bond = Bond {
             config,
-            log_path,
-            config_file,
-            mount_file_path,
+            volume_name,
         };
 
         Ok(bond)
     }
     pub fn write_config_file(&self) -> Result<(), String> {
-        let path = Path::new(&self.config_file);
-        if let Some(parent) = path.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                return Err(format!(
-                    "create config parent dir[{}] fail, {}",
-                    parent.to_str().unwrap_or(""),
-                    e
-                ));
-            }
-        }
+        let config_file = utils::gen_config_file(&self.volume_name);
+        utils::parent_mkdirs(Path::new(&config_file))?;
+
         let content = match serde_json::to_string_pretty(&self.config) {
             Ok(v) => v,
             Err(e) => return Err(format!("error parsing from json to string: {:?}", e)),
         };
-        if let Err(e) = fs::write(&self.config_file, content) {
+        if let Err(e) = fs::write(&config_file, content) {
             return Err(format!("fail: write body to path file fail, {}", e));
         }
         Ok(())
     }
+
+    pub fn write_start_file(&self) -> Result<(), String> {
+        let start_file = utils::gen_start_file(&self.volume_name);
+        // 父目录创建
+        utils::parent_mkdirs(Path::new(&start_file))?;
+        // 创建 start.sh 文件
+        let content = utils::gen_start_shell_content(&self.volume_name);
+        if let Err(e) = fs::write(&start_file, content) {
+            return Err(format!("fail: write start.sh fail, {}", e));
+        }
+        // 添加执行权限 start.sh
+        match Command::new("chmod").arg("+x").arg(&start_file).output() {
+            Ok(output) => match String::from_utf8(output.stdout) {
+                Ok(_v) => Ok(()),
+                Err(e) => Err(format!("encode output to utf8 fail, {}", e)),
+            },
+            Err(e) => Err(format!("chmod +x start.sh fail, {}", e)),
+        }
+    }
     pub fn startup(&self) -> Result<String, String> {
+        // not first start
+        if self.ready() {
+            return Ok("OK".to_string());
+        }
         // write json config file
         if let Err(e) = &self.write_config_file() {
-            return Err(format!("fail: write config to file, {}", e));
+            return Err(format!("write config to file, {}", e));
+        }
+        // write start shell file
+        if let Err(e) = &self.write_start_file() {
+            return Err(format!("write config to file, {}", e));
         }
         // create log path
-        if let Err(e) = std::fs::create_dir_all(&self.log_path) {
-            return Err(format!("create log dir[{}] fail, {}", self.log_path, e));
+        let log_path = utils::gen_log_path(&self.volume_name);
+        if let Err(e) = std::fs::create_dir_all(&log_path) {
+            return Err(format!("create log dir[{}] fail, {}", &log_path, e));
         }
-        let mount_file_path = Path::new(&self.mount_file_path);
-
-        if !mount_file_path.exists() {
-            if let Err(e) = std::fs::create_dir_all(&self.mount_file_path) {
-                return Err(format!(
-                    "create mount dir[{}] fail, maybe client process exit but not umount. {}",
-                    &self.mount_file_path, e
-                ));
-            }
-        }
-
-        let shell = format!("/cfs/client/cfs-client -f -c {}", &self.config_file);
-        match Command::new("/cfs/client/cfs-client")
-            .arg("-f")
-            .arg("-c")
-            .arg(&self.config_file)
-            .spawn()
-        {
+        // mount file mkdirs
+        let mount_file_path = utils::gen_mount_path(&self.volume_name);
+        utils::mkdirs(Path::new(&mount_file_path))?;
+        // execute: /cfs/bond/{volume_name}/start.sh
+        let start_file = utils::gen_start_file(&self.volume_name);
+        match Command::new(&start_file).spawn() {
             Ok(child) => {
                 let pid = child.id();
+                println!("sub child {}", pid);
                 sleep(Duration::from_millis(1500));
-                let res = self.pid_exists(pid);
+                let res = self.ready();
                 if res {
-                    Ok(format!("{}", pid))
+                    Ok(format!("OK,{}", pid))
                 } else {
-                    Ok("fail: child process exit".to_string())
+                    Ok("child process exit".to_string())
                 }
             }
             Err(e) => {
                 println!("{}", e);
-                Err(format!("fail: start[{}] fail, output:{}\n", &shell, e))
+                Err(format!("exec {} fail, output:{}\n", &start_file, e))
             }
         }
     }
 
-    fn pid_exists(&self, pid: u32) -> bool {
-        let shell = format!(
-            "ps aux|grep {}|grep '/cfs/client/cfs-client -f -c {}'|wc -l",
-            pid, &self.config_file
-        );
+    fn ready(&self) -> bool {
+        let shell = utils::get_bond_shell(&self.volume_name);
         match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
             Ok(output) => match String::from_utf8(output.stdout) {
                 Ok(v) => {
@@ -191,15 +197,15 @@ impl Bond {
     }
 }
 
-#[post("/mount", data = "<input>")]
+#[post("/bond", data = "<input>")]
 pub fn mount(input: Option<String>) -> String {
     if input.is_none() {
-        return "body is empty".to_string();
+        return "fail: body is empty".to_string();
     }
 
     let config = serde_json::from_str(input.unwrap().as_str());
     if let Err(e) = config {
-        return format!("parse body fail: {}", e);
+        return format!("fail: parse body fail: {}", e);
     }
     let config = config.unwrap();
     // 1. setup and start
