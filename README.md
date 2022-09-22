@@ -92,12 +92,29 @@ tar -zxcv dist/release.tar.gz -C  /data/service/
 ln -s /data/service/cubefs-bond-0.1.4/ cubefs-bond
 ```
 
+## Ansible 安装
+
+使用 minio 提供软件，每台机器上使用 mc 从 minio 中下载安装包。
+
+```bash
+ansible -i pre-docker all -m shell -a "
+cd ~/ &&
+mc cp minio/deploy/cubefs-bond-0.1.4.tar.gz . &&
+rm -rf /data/service/cubefs-bond-0.1.4 &&
+tar -zxvf cubefs-bond-0.1.4.tar.gz -C /data/service/ &&
+ln -s /data/service/cubefs-bond-0.1.4 /data/service/cubefs-bond &&
+/data/service/cubefs-bond/bin/start.sh
+"
+
+
+```
+
 ## 启停
 
 ### 启动
 
 ```bash
-/data/service/cubefs-bond/bin/stop.sh
+/data/service/cubefs-bond/bin/start.sh
 ```
 
 ### 停止

@@ -25,7 +25,7 @@ APP_PID="$BASE/pid"
 APP_OUT="${APP_LOGS}/${APP_NAME}.out"
 
 #port
-APP_PORT=`cat ${APP_CONF}/Rocket.toml|grep 'port ='|cut -d '=' -f 2|cut -d ' ' -f 2`
+APP_PORT=`cat ${APP_CONF}/cubefs-bond.toml|grep 'port ='|cut -d '=' -f 2|cut -d ' ' -f 2`
 
 
 ################################
@@ -78,7 +78,8 @@ function init() {
 function check() {
     PID=`ps aux|grep 'cubefs-bond -d'|grep -v grep|awk '{print $2}'`
     if [ -n "$PID" ]; then
-        debug error "The ${APP_NAME} already started! PID: $PID"
+        debug error "The ${APP_NAME} already started! PID: $PID, port:${APP_PORT}"
+        ps aux|grep 'cubefs-bond -d'|grep -v grep
         exit 1
     fi
 }
@@ -88,14 +89,14 @@ function start() {
     cd $BASE
     nohup $BASE/bin/cubefs-bond ${params} > ${APP_OUT} 2>&1 &
     PID=$!
-    debug info "${APP_NAME}(pid ${PID}) is started."
+    debug info "${APP_NAME}(pid ${PID}, port:${APP_PORT}) is started."
     ps aux|grep 'cubefs-bond -d'|grep -v grep
 }
 
 function status() {
     PID=`ps aux|grep 'cubefs-bond -d'|grep -v grep|awk '{print $2}'`
     if [ -n "$PID" ]; then
-        debug info "${APP_NAME}(pid ${PID}) is running..."
+        debug info "${APP_NAME}(pid ${PID}, port:${APP_PORT}) is running..."
         ps aux|grep 'cubefs-bond -d'|grep -v grep
     else
         debug info "${APP_NAME} is not running."
