@@ -1,7 +1,7 @@
 use std::process::Command;
 
 #[delete("/bond/<volume_name>")]
-pub fn umount(volume_name: Option<String>) -> String {
+pub fn bond_delete_router(volume_name: Option<String>) -> String {
     if volume_name.is_none() {
         return "fail: volume_name missing".to_string();
     }
@@ -17,7 +17,7 @@ pub fn umount(volume_name: Option<String>) -> String {
     );
     match Command::new("sh").arg("-c").arg(&mount_path).output() {
         Ok(output) => match String::from_utf8(output.stdout) {
-            Ok(_v) => "ok".to_string(),
+            Ok(_v) => "OK".to_string(),
             Err(e) => format!("fail: parse shell output fail, {}", e),
         },
         Err(e) => {

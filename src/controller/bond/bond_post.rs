@@ -1,14 +1,12 @@
+use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
 
-use std::process::Command;
-
-use serde::{Deserialize, Serialize};
-use serde_with::skip_serializing_none;
-
-use crate::utils;
+use crate::utils::{self, ErrorCode};
 
 #[allow(unused, non_snake_case)]
 #[skip_serializing_none]
@@ -20,13 +18,13 @@ struct ClientConfig {
 
     owner: Option<String>, // 所有者，是
 
-    masterAddr: String, // Master节点地址，是
+    masterAddr: Option<String>, // Master节点地址，是
 
     logDir: Option<String>, // 日志存放路径，否
 
     logLevel: Option<String>, // 日志级别：debug, info, warn, error， 否
 
-    profPort: Option<String>, // golang pprof调试端口，否
+    profPort: String, // golang pprof调试端口，否
 
     exporterPort: Option<String>, // prometheus获取监控数据端口，否
 
@@ -85,7 +83,7 @@ impl Bond {
         if config.volName.is_none() {
             return Err("volName missing".to_string());
         }
-        if config.masterAddr.is_empty() {
+        if config.masterAddr.is_none() {
             return Err("masterAddr missing".to_string());
         }
         let volume_name = config.volName.as_ref().unwrap().clone();
@@ -108,97 +106,96 @@ impl Bond {
 
         Ok(bond)
     }
-    pub fn write_config_file(&self) -> Result<(), String> {
+    pub fn write_config_file(&self) -> Result<(), ErrorCode> {
         let config_file = utils::gen_config_file(&self.volume_name);
         utils::parent_mkdirs(Path::new(&config_file))?;
 
-        let content = match serde_json::to_string_pretty(&self.config) {
-            Ok(v) => v,
-            Err(e) => return Err(format!("error parsing from json to string: {:?}", e)),
-        };
+        let content = serde_json::to_string_pretty(&self.config).map_err(|e| {
+            let msg = format!("serde fail for object: {:?}", &self.config);
+            ErrorCode::E10002_SERDE(msg, e)
+        })?;
+
         if let Err(e) = fs::write(&config_file, content) {
-            return Err(format!("fail: write body to path file fail, {}", e));
+            let msg = format!("fail: write body to path file fail, {:?}", e);
+            return Err(ErrorCode::E10004_WRITE_FILE(msg, e));
         }
         Ok(())
     }
 
-    pub fn write_start_file(&self) -> Result<(), String> {
+    pub fn write_start_file(&self) -> Result<(), ErrorCode> {
         let start_file = utils::gen_start_file(&self.volume_name);
         // 父目录创建
         utils::parent_mkdirs(Path::new(&start_file))?;
         // 创建 start.sh 文件
         let content = utils::gen_start_shell_content(&self.volume_name);
         if let Err(e) = fs::write(&start_file, content) {
-            return Err(format!("fail: write start.sh fail, {}", e));
+            return Err(ErrorCode::E10004_WRITE_FILE(start_file, e));
         }
-        // 添加执行权限 start.sh
-        match Command::new("chmod").arg("+x").arg(&start_file).output() {
-            Ok(output) => match String::from_utf8(output.stdout) {
-                Ok(_v) => Ok(()),
-                Err(e) => Err(format!("encode output to utf8 fail, {}", e)),
-            },
-            Err(e) => Err(format!("chmod +x start.sh fail, {}", e)),
+        // 添加执行权限 chmod +x start.sh
+        let program = "chmod";
+        let arg1 = "+x";
+        let output = Command::new(program)
+            .arg(arg1)
+            .arg(&start_file)
+            .output()
+            .map_err(|e| {
+                let msg = format!("{} {} {}", program, arg1, &start_file);
+                ErrorCode::E10006_EXEC_PROGRAM(msg, e)
+            })?;
+        if !output.stdout.is_empty() {
+            let res = String::from_utf8(output.stdout)?;
+            return Err(ErrorCode::E10007_CHMOD_NO_POWER(res));
         }
+        Ok(())
     }
-    pub fn startup(&self) -> Result<String, String> {
+    pub fn startup(&self) -> Result<String, ErrorCode> {
         // not first start
         if self.ready() {
             return Ok("OK".to_string());
         }
         // write json config file
-        if let Err(e) = &self.write_config_file() {
-            return Err(format!("write config to file, {}", e));
-        }
+        self.write_config_file()?;
         // write start shell file
-        if let Err(e) = &self.write_start_file() {
-            return Err(format!("write config to file, {}", e));
-        }
+        self.write_start_file()?;
         // create log path
         let log_path = utils::gen_log_path(&self.volume_name);
-        if let Err(e) = std::fs::create_dir_all(&log_path) {
-            return Err(format!("create log dir[{}] fail, {}", &log_path, e));
-        }
+        utils::mkdirs(Path::new(&log_path))?;
         // mount file mkdirs
         let mount_file_path = utils::gen_mount_path(&self.volume_name);
         utils::mkdirs(Path::new(&mount_file_path))?;
         // execute: /cfs/bond/{volume_name}/start.sh
         let start_file = utils::gen_start_file(&self.volume_name);
-        match Command::new(&start_file).spawn() {
-            Ok(child) => {
-                let pid = child.id();
-                println!("sub child {}", pid);
-                sleep(Duration::from_millis(1500));
-                let res = self.ready();
-                if res {
-                    Ok(format!("OK,{}", pid))
-                } else {
-                    Ok("child process exit".to_string())
-                }
-            }
-            Err(e) => {
-                println!("{}", e);
-                Err(format!("exec {} fail, output:{}\n", &start_file, e))
-            }
+
+        let child = Command::new(&start_file)
+            .spawn()
+            .map_err(|e| ErrorCode::E10006_EXEC_PROGRAM(start_file.clone(), e))?;
+        let pid = child.id();
+        dbg!("sub child {}", pid);
+        sleep(Duration::from_millis(1500));
+        let res = self.ready();
+        if res {
+            Ok(format!("OK,{}", pid))
+        } else {
+            Ok("child process exit".to_string())
         }
     }
 
     fn ready(&self) -> bool {
         let shell = utils::get_bond_shell(&self.volume_name);
-        match Command::new("/bin/sh").arg("-c").arg(&shell).output() {
-            Ok(output) => match String::from_utf8(output.stdout) {
-                Ok(v) => {
-                    let v = v.trim();
-                    v != "0"
-                }
-                Err(_) => false,
-            },
-            Err(_) => false,
+        let output = Command::new("/bin/sh").arg("-c").arg(&shell).output();
+        if output.is_err() {
+            return false;
         }
+        let stdout = String::from_utf8(output.unwrap().stdout);
+        if stdout.is_err() {
+            return false;
+        }
+        stdout.unwrap().trim() != "0"
     }
 }
 
 #[post("/bond", data = "<input>")]
-pub fn mount(input: Option<String>) -> String {
+pub fn bond_post_router(input: Option<String>) -> String {
     if input.is_none() {
         return "fail: body is empty".to_string();
     }
@@ -220,13 +217,15 @@ pub fn mount(input: Option<String>) -> String {
     match bond.startup() {
         Ok(v) => v,
         Err(e) => {
-            format!("fail: start client fail, {}", e)
+            format!("fail: start client fail, {:?}", e)
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::utils::ErrorCode;
+
     use super::{Bond, ClientConfig};
 
     #[test]
@@ -265,7 +264,7 @@ mod test {
                 println!("{}", v)
             }
             Err(e) => {
-                println!("fail: start client fail, {}", e)
+                println!("fail: start client fail, {}", ErrorCode::to_string(e))
             }
         }
     }

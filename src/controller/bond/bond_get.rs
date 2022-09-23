@@ -3,7 +3,7 @@ use std::process::Command;
 use crate::utils;
 
 #[get("/bond/<volume_name>")]
-pub fn get_bond(volume_name: Option<String>) -> String {
+pub fn bond_get_router(volume_name: Option<String>) -> String {
     if volume_name.is_none() {
         return "fail: volume_name missing".to_string();
     }

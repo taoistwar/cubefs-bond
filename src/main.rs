@@ -1,9 +1,10 @@
 mod controller;
+mod errors;
 mod utils;
-use controller::delete_bond::umount;
-use controller::get_bond::get_bond;
-use controller::index::index;
-use controller::post_bond::mount;
+use controller::bond::bond_delete_router;
+use controller::bond::bond_get_router;
+use controller::bond::bond_post_router;
+use controller::index_router;
 
 use figment::{
     providers::{Format, Toml},
@@ -21,5 +22,13 @@ const CFS_MOUNT_HOME: &str = "/cfs/mount";
 fn rocket() -> _ {
     let figment = Figment::from(rocket::Config::default())
         .merge(Toml::file("conf/cubefs-bond.toml").nested());
-    rocket::custom(figment).mount("/api", routes![index, mount, umount, get_bond])
+    rocket::custom(figment).mount(
+        "/api",
+        routes![
+            index_router,
+            bond_get_router,
+            bond_post_router,
+            bond_delete_router
+        ],
+    )
 }

@@ -1,5 +1,5 @@
 #[get("/")]
-pub fn index() -> &'static str {
+pub fn index_router() -> &'static str {
     r#"three API: /mount /umount /ready
         API  URI: /mount
              BODY: {}

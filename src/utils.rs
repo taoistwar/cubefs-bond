@@ -1,30 +1,77 @@
-use std::path::Path;
+use std::{path::Path, string::FromUtf8Error};
+
+use tokio::time::error::Error;
 
 use crate::{CFS_BOND_HOME, CFS_CLIENT_FILE, CFS_MOUNT_HOME};
-pub fn parent_mkdirs(current_file: &Path) -> Result<(), String> {
+
+#[allow(non_camel_case_types)]
+#[derive(Debug)]
+pub enum ErrorCode {
+    E10001_IO_ERROR(std::io::Error),
+    E10002_SERDE(String, serde_json::Error),
+    /** mkdirs but param is file*/
+    E10003_MKDIRS(String),
+    E10004_WRITE_FILE(String, std::io::Error),
+    E10005(FromUtf8Error),
+    E10006_EXEC_PROGRAM(String, std::io::Error),
+    E10007_CHMOD_NO_POWER(String),
+}
+
+impl std::fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorCode::E10001_IO_ERROR(e) => write!(f, "10001:{:?}", e),
+            ErrorCode::E10002_SERDE(obj, e) => {
+                write!(f, "10002: serde objet[{:?}] fail, {:?}", obj, e)
+            }
+            ErrorCode::E10003_MKDIRS(file) => {
+                write!(f, "10003: mkdirs needs dir, but file[{:?}]", file)
+            }
+            ErrorCode::E10004_WRITE_FILE(file, e) => {
+                write!(f, "10004: write file[{}] fail, {:?}", file, e)
+            }
+            ErrorCode::E10005(e) => {
+                write!(f, "10005: FromUtf8Error, {:?}", e)
+            }
+            ErrorCode::E10006_EXEC_PROGRAM(program, e) => {
+                write!(f, "10006: EXEC PROGRAM[{}] fail, {:?}", program, e)
+            }
+            ErrorCode::E10007_CHMOD_NO_POWER(program) => {
+                write!(f, "10007: CHMOD_NO_POWER {}", program)
+            }
+        }
+    }
+}
+
+impl From<std::io::Error> for ErrorCode {
+    fn from(e: std::io::Error) -> Self {
+        ErrorCode::E10001_IO_ERROR(e)
+    }
+}
+
+impl From<FromUtf8Error> for ErrorCode {
+    fn from(e: FromUtf8Error) -> Self {
+        ErrorCode::E10005(e)
+    }
+}
+
+pub fn parent_mkdirs(current_file: &Path) -> Result<(), ErrorCode> {
     if let Some(parent) = current_file.parent() {
         return mkdirs(parent);
     }
     Ok(())
 }
 
-pub fn mkdirs(current_file: &Path) -> Result<(), String> {
+pub fn mkdirs(current_file: &Path) -> Result<(), ErrorCode> {
     if current_file.exists() {
         return Ok(());
     }
     if current_file.is_dir() {
-        return Err(format!(
-            "path[{}] needs dir but is a file",
-            current_file.to_str().unwrap_or(""),
+        return Err(ErrorCode::E10003_MKDIRS(
+            current_file.to_str().unwrap_or("").to_string(),
         ));
     }
-    if let Err(e) = std::fs::create_dir_all(current_file) {
-        return Err(format!(
-            "mkdirs [{}] fail, {}",
-            current_file.to_str().unwrap_or(""),
-            e
-        ));
-    }
+    std::fs::create_dir_all(current_file)?;
     Ok(())
 }
 
@@ -74,10 +121,10 @@ pub fn gen_start_shell_content(volume_name: &str) -> String {
 mod test {
     use std::path::Path;
 
-    use super::mkdirs;
+    use super::{mkdirs, ErrorCode};
 
     #[test]
-    fn test_mkdirs() -> Result<(), String> {
+    fn test_mkdirs() -> Result<(), ErrorCode> {
         let path = Path::new("/");
         mkdirs(path)?;
         Ok(())
