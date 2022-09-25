@@ -6,7 +6,7 @@ pub enum ErrorCode {
     E10001_IO_ERROR(std::io::Error),
     E10002_SERDE(String, serde_json::Error),
     /** mkdirs but param is file*/
-    E10003_MKDIRS(String),
+    E10003_MKDIRS_NEED_DIR(String),
     E10004_WRITE_FILE(String, std::io::Error),
     E10005(FromUtf8Error),
     E10006_EXEC_PROGRAM(String, std::io::Error),
@@ -20,7 +20,7 @@ impl Display for ErrorCode {
             ErrorCode::E10002_SERDE(obj, e) => {
                 write!(f, "10002: serde objet[{:?}] fail, {:?}", obj, e)
             }
-            ErrorCode::E10003_MKDIRS(file) => {
+            ErrorCode::E10003_MKDIRS_NEED_DIR(file) => {
                 write!(f, "10003: mkdirs needs dir, but file[{:?}]", file)
             }
             ErrorCode::E10004_WRITE_FILE(file, e) => {
@@ -44,7 +44,7 @@ impl Error for ErrorCode {
         match self {
             ErrorCode::E10001_IO_ERROR(e) => Some(e),
             ErrorCode::E10002_SERDE(_obj, e) => Some(e),
-            ErrorCode::E10003_MKDIRS(_file) => None,
+            ErrorCode::E10003_MKDIRS_NEED_DIR(_file) => None,
             ErrorCode::E10004_WRITE_FILE(_file, e) => Some(e),
             ErrorCode::E10005(e) => Some(e),
             ErrorCode::E10006_EXEC_PROGRAM(_program, e) => Some(e),

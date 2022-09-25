@@ -14,7 +14,7 @@ pub fn mkdirs(current_file: &Path) -> Result<(), ErrorCode> {
         return Ok(());
     }
     if current_file.is_dir() {
-        return Err(ErrorCode::E10003_MKDIRS(
+        return Err(ErrorCode::E10003_MKDIRS_NEED_DIR(
             current_file.to_str().unwrap_or("").to_string(),
         ));
     }
