@@ -5,7 +5,6 @@ use std::{error::Error, fmt::Display, string::FromUtf8Error};
 pub enum ErrorCode {
     E10001_IO_ERROR(std::io::Error),
     E10002_SERDE(String, serde_json::Error),
-    /** mkdirs but param is file*/
     E10003_MKDIRS_NEED_DIR(String),
     E10004_WRITE_FILE(String, std::io::Error),
     E10005(FromUtf8Error),
