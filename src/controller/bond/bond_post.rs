@@ -6,7 +6,8 @@ use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
 
-use crate::utils::{self, ErrorCode};
+use crate::errors::ErrorCode;
+use crate::utils::{self};
 
 #[allow(unused, non_snake_case)]
 #[skip_serializing_none]
@@ -224,7 +225,6 @@ pub fn bond_post_router(input: Option<String>) -> String {
 
 #[cfg(test)]
 mod test {
-    use crate::utils::ErrorCode;
 
     use super::{Bond, ClientConfig};
 
@@ -264,7 +264,7 @@ mod test {
                 println!("{}", v)
             }
             Err(e) => {
-                println!("fail: start client fail, {}", ErrorCode::to_string(e))
+                println!("fail: start client fail, {}", e)
             }
         }
     }
