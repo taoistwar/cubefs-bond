@@ -145,7 +145,7 @@ impl Bond {
             })?;
         if !output.stdout.is_empty() {
             let res = String::from_utf8(output.stdout)?;
-            return Err(ErrorCode::E10007_CHMOD_NO_POWER(res));
+            return Err(ErrorCode::E10007_CHMOD_FAIL(res));
         }
         Ok(())
     }

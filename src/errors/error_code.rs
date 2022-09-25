@@ -10,7 +10,7 @@ pub enum ErrorCode {
     E10004_WRITE_FILE(String, std::io::Error),
     E10005(FromUtf8Error),
     E10006_EXEC_PROGRAM(String, std::io::Error),
-    E10007_CHMOD_NO_POWER(String),
+    E10007_CHMOD_FAIL(String),
 }
 
 impl Display for ErrorCode {
@@ -30,10 +30,10 @@ impl Display for ErrorCode {
                 write!(f, "10005: FromUtf8Error, {:?}", e)
             }
             ErrorCode::E10006_EXEC_PROGRAM(program, e) => {
-                write!(f, "10006: EXEC PROGRAM[{}] fail, {:?}", program, e)
+                write!(f, "10006: exec program[{}] fail, {:?}", program, e)
             }
-            ErrorCode::E10007_CHMOD_NO_POWER(program) => {
-                write!(f, "10007: CHMOD_NO_POWER {}", program)
+            ErrorCode::E10007_CHMOD_FAIL(program) => {
+                write!(f, "10007: chmod fail {}", program)
             }
         }
     }
@@ -48,7 +48,7 @@ impl Error for ErrorCode {
             ErrorCode::E10004_WRITE_FILE(_file, e) => Some(e),
             ErrorCode::E10005(e) => Some(e),
             ErrorCode::E10006_EXEC_PROGRAM(_program, e) => Some(e),
-            ErrorCode::E10007_CHMOD_NO_POWER(_program) => None,
+            ErrorCode::E10007_CHMOD_FAIL(_program) => None,
         }
     }
 }
