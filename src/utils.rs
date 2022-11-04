@@ -41,8 +41,8 @@ pub fn gen_log_path(volume_name: &str) -> String {
     let config_file = format!("{}/{}/log", CFS_BOND_HOME, volume_name);
     config_file
 }
-pub fn gen_mount_path(volume_name: &str) -> String {
-    let mount_file_path = format!("{}/{}", CFS_MOUNT_HOME, &volume_name);
+pub fn gen_mount_path(mount_point: &str) -> String {
+    let mount_file_path = format!("{}/{}", CFS_MOUNT_HOME, mount_point);
     mount_file_path
 }
 

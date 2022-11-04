@@ -13,8 +13,6 @@ use crate::utils::{self};
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct ClientConfig {
-    mountPoint: Option<String>, // 挂载点，是
-
     volName: Option<String>, // 卷名称，是
 
     owner: Option<String>, // 所有者，是
@@ -71,16 +69,28 @@ struct ClientConfig {
 
     enableBcache: Option<bool>, // 是否开启本地一级缓存，默认false
 }
+#[allow(unused, non_snake_case)]
+#[skip_serializing_none]
+#[derive(Debug, Serialize, Deserialize, Default)]
+struct BondBody {
+    mountPoint: Option<String>, // 挂载点，是
+    config: Option<ClientConfig>,
+}
 
-struct Bond {
+struct BondService {
     config: ClientConfig,
     volume_name: String,
 }
 
-impl Bond {
-    fn setup(config: ClientConfig) -> Result<Bond, String> {
-        let mut config = config;
-
+impl BondService {
+    fn setup(body: BondBody) -> Result<BondService, String> {
+        if body.config.is_none() {
+            return Err("config missing".to_string());
+        }
+        if body.mountPoint.is_none() {
+            return Err("mountPoint missing".to_string());
+        }
+        let mut config = body.config.unwrap();
         if config.volName.is_none() {
             return Err("volName missing".to_string());
         }
@@ -88,8 +98,7 @@ impl Bond {
             return Err("masterAddr missing".to_string());
         }
         let volume_name = config.volName.as_ref().unwrap().clone();
-        // mount file
-        config.mountPoint = Some(utils::gen_mount_path(&volume_name));
+
         // bond volume
         config.logDir = Some(utils::gen_log_path(&volume_name));
 
@@ -100,7 +109,7 @@ impl Bond {
         if config.owner.is_none() {
             config.owner = Some("cfs".to_string());
         }
-        let bond = Bond {
+        let bond = BondService {
             config,
             volume_name,
         };
@@ -207,7 +216,7 @@ pub fn bond_post_router(input: Option<String>) -> String {
     }
     let config = config.unwrap();
     // 1. setup and start
-    let bond = match Bond::setup(config) {
+    let bond = match BondService::setup(config) {
         Ok(v) => v,
         Err(e) => {
             return format!("fail: parse param, {}", e);
@@ -226,7 +235,7 @@ pub fn bond_post_router(input: Option<String>) -> String {
 #[cfg(test)]
 mod test {
 
-    use super::{Bond, ClientConfig};
+    use super::{BondBody, BondService, ClientConfig};
 
     #[test]
     fn test_serde() {
@@ -243,15 +252,18 @@ mod test {
     #[test]
     fn test() {
         let input = r#"{
-            "volName": "test",
-            "owner": "cfs",
-            "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868",
-            "profPort": "17510",
-            "exporterPort": "9504"
+            "config": {
+                "volName": "test",
+                "owner": "cfs",
+                "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868",
+                "profPort": "17510",
+                "exporterPort": "9504"
+            },
+            "mountPoint": "cubefs_mount"
           }"#;
         // 1. setup and start
-        let config: ClientConfig = serde_json::from_str(input).unwrap();
-        let bond = match Bond::setup(config) {
+        let config: BondBody = serde_json::from_str(input).unwrap();
+        let bond = match BondService::setup(config) {
             Ok(v) => v,
             Err(e) => {
                 println!("fail: parse param, {}", e);

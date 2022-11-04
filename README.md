@@ -11,7 +11,7 @@
 - 在 Pod 中挂载
 - 在宿主机中挂载
 
-### 直接在 Pod 中挂载
+### 直接在 Pod 中挂载（不行）
 
 cubefs 中的 volume，如果直接在 pod 中挂载，需要较高的权限去执行 `modprobe fuse`。
 因此，安全风险较高，如果 Pod 内的其它容器被攻破，可能导致宿主机也被攻破……
@@ -35,20 +35,19 @@ cubefs-bond 是此种方式的宿主机代理实现.
 #### 缺点
 
 - 多了一个代理程序
-- 占用宿主机端口，且需要人工维护
+- 占用宿主机端口，且需要人工维护。
   - exporterPort
   - profPort
--
+- 相同类型的Pod配置为不能在同一节点。如果在同一节点，不要配置端口号。
 
 ## cubefs-bond 原理
 
 1. 准备
    - 创建配置文件，位于：`/cfs/bond/{volume_name}/config.json`
      - 重置配置目录 logDir 为：`/cfs/bond/{volume_name}/log`
-     - 重置挂载目录 mountPoint 为：`/cfs/mount/{volume_name}`
+     - 重置挂载目录 mountPoint 为：`/cfs/mount/{mount_point}`
      - logLevel 如果缺失，重置为 info。
      - owner 如果缺失，重置为 cfs。
-     -
    - 创建启动文件，位于：`/cfs/bond/{volume_name}/start.sh`
    - 创建日志目录，位于：`/cfs/bond/{volume_name}/log`
 2. 执行挂载 `sh /cfs/bond/{volume_name}/start.sh`
@@ -66,7 +65,7 @@ cubefs-bond 是此种方式的宿主机代理实现.
 
 #### 源码构建
 
-```
+```bash
 git clone https://github.com/taoistwar/cubefs-bond.git
 cd cubefs-bond
 ./build
@@ -105,8 +104,6 @@ tar -zxvf cubefs-bond-0.1.4.tar.gz -C /data/service/ &&
 ln -s /data/service/cubefs-bond-0.1.4 /data/service/cubefs-bond &&
 /data/service/cubefs-bond/bin/start.sh
 "
-
-
 ```
 
 ## 启停
@@ -134,7 +131,37 @@ ln -s /data/service/cubefs-bond-0.1.4 /data/service/cubefs-bond &&
 ### 挂载卷
 
 ```bash
-curl -XPOST -d '{ "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868", "volName": "test", "owner": "cfs", "logLevel": "info", "exporterPort": "19320", "profPort": "17320" }' http://localhost:18101/api/bond
+mountPoint="test"
+masterAddr="10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868"
+volName="test"
+bondBody=$(cat <<EOF
+{
+  "mountPoint": "${mountPoint}",
+  "config": {
+    "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868", \
+    "volName": "test", \
+    "owner": "cfs", \
+    "logLevel": "info", \
+    "exporterPort": "19320", \
+    "profPort": "17320" \
+  }
+}
+EOF
+)
+curl -XPOST -d "$bondBody" http://localhost:18101/api/bond
+
+curl -XPOST -d '{ \
+  "mountPoint": "xx",
+  "config": {
+    "masterAddr": "10.201.3.28:8868,10.201.3.29:8868,10.201.3.30:8868", \
+    "volName": "test", \
+    "owner": "cfs", \
+    "logLevel": "info", \
+    "exporterPort": "19320", \
+    "profPort": "17320" \
+  }
+}' \
+http://localhost:18101/api/bond
 ```
 
 ### 查看卷

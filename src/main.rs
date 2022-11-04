@@ -2,6 +2,8 @@ mod commons;
 mod controller;
 mod errors;
 mod utils;
+use std::path::Path;
+
 use controller::bond::bond_delete_router;
 use controller::bond::bond_get_router;
 use controller::bond::bond_post_router;
@@ -21,8 +23,8 @@ const CFS_MOUNT_HOME: &str = "/cfs/mount";
 
 #[launch]
 fn rocket() -> _ {
-    let figment = Figment::from(rocket::Config::default())
-        .merge(Toml::file("conf/cubefs-bond.toml").nested());
+    let figment =
+        Figment::from(rocket::Config::default()).merge(Toml::file(get_config_file()).nested());
     rocket::custom(figment).mount(
         "/api",
         routes![
@@ -32,4 +34,16 @@ fn rocket() -> _ {
             bond_delete_router
         ],
     )
+}
+
+fn get_config_file() -> String {
+    let files = vec!["./cargo.toml", "./vscode", "./git"];
+
+    let count = files.iter().filter(|file| Path::new(file).exists()).count();
+    // 开发模式
+    if count == files.len() {
+        "build/conf/cubefs-bond.toml".to_string()
+    } else {
+        "conf/cubefs-bond.toml".to_string()
+    }
 }
